@@ -63,7 +63,6 @@ func (server *Server) mount() *chi.Mux {
 		r.Mount("/posts", server.postRoutes())
 
 	})
-	//})
 
 	return chiMux
 }

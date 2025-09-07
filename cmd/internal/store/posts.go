@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"social-app/cmd/internal/models"
 )
 
@@ -13,28 +14,38 @@ type PostsStore interface {
 	ListPosts(ctx context.Context) ([]models.Post, error)
 }
 
+type PostsPostgresStore struct {
+	db *sql.DB
+}
+
+func NewPostsPostgresStore(db *sql.DB) *PostsPostgresStore {
+	return &PostsPostgresStore{
+		db: db,
+	}
+}
+
 // Post operations (placeholder implementations)
-func (p *PostgresStore) CreatePost(ctx context.Context, post models.Post) error {
+func (po *PostsPostgresStore) CreatePost(ctx context.Context, post models.Post) error {
 	// TODO: Implement
 	return nil
 }
 
-func (p *PostgresStore) GetPost(ctx context.Context, id string) (*models.Post, error) {
+func (po *PostsPostgresStore) GetPost(ctx context.Context, id string) (*models.Post, error) {
 	// TODO: Implement
 	return nil, nil
 }
 
-func (p *PostgresStore) UpdatePost(ctx context.Context, id string, post models.Post) error {
+func (po *PostsPostgresStore) UpdatePost(ctx context.Context, id string, post models.Post) error {
 	// TODO: Implement
 	return nil
 }
 
-func (p *PostgresStore) DeletePost(ctx context.Context, id string) error {
+func (po *PostsPostgresStore) DeletePost(ctx context.Context, id string) error {
 	// TODO: Implement
 	return nil
 }
 
-func (p *PostgresStore) ListPosts(ctx context.Context) ([]models.Post, error) {
+func (po *PostsPostgresStore) ListPosts(ctx context.Context) ([]models.Post, error) {
 	// TODO: Implement
 	return nil, nil
 }

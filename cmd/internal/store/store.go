@@ -8,6 +8,7 @@ import (
 type Store interface {
 	UsersStore
 	PostsStore
+	AuthStore
 }
 
 type PostgresStore struct {

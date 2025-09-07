@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"social-app/cmd/internal/models"
 )
 
@@ -13,16 +14,26 @@ type UsersStore interface {
 	ListUsers(ctx context.Context) ([]models.User, error)
 }
 
+type UsersPostgresStore struct {
+	db *sql.DB
+}
+
+func NewUsersPostgresStore(db *sql.DB) *UsersPostgresStore {
+	return &UsersPostgresStore{
+		db: db,
+	}
+}
+
 // User operations implementation
-func (p *PostgresStore) CreateUser(ctx context.Context, user models.User) error {
+func (u *UsersPostgresStore) CreateUser(ctx context.Context, user models.User) error {
 	query := `INSERT INTO users (id, first_name, last_name) VALUES ($1, $2, $3)`
-	_, err := p.db.ExecContext(ctx, query, user.ID, user.FirstName, user.LastName)
+	_, err := u.db.ExecContext(ctx, query, user.ID, user.FirstName, user.LastName)
 	return err
 }
 
-func (p *PostgresStore) GetUser(ctx context.Context, id string) (*models.User, error) {
+func (u *UsersPostgresStore) GetUser(ctx context.Context, id string) (*models.User, error) {
 	query := `SELECT id, first_name, last_name FROM users WHERE id = $1`
-	row := p.db.QueryRowContext(ctx, query, id)
+	row := u.db.QueryRowContext(ctx, query, id)
 
 	var user models.User
 	err := row.Scan(&user.ID, &user.FirstName, &user.LastName)
@@ -32,21 +43,21 @@ func (p *PostgresStore) GetUser(ctx context.Context, id string) (*models.User, e
 	return &user, nil
 }
 
-func (p *PostgresStore) UpdateUser(ctx context.Context, id string, user models.User) error {
+func (u *UsersPostgresStore) UpdateUser(ctx context.Context, id string, user models.User) error {
 	query := `UPDATE users SET first_name = $1, last_name = $2 WHERE id = $3`
-	_, err := p.db.ExecContext(ctx, query, user.FirstName, user.LastName, id)
+	_, err := u.db.ExecContext(ctx, query, user.FirstName, user.LastName, id)
 	return err
 }
 
-func (p *PostgresStore) DeleteUser(ctx context.Context, id string) error {
+func (u *UsersPostgresStore) DeleteUser(ctx context.Context, id string) error {
 	query := `DELETE FROM users WHERE id = $1`
-	_, err := p.db.ExecContext(ctx, query, id)
+	_, err := u.db.ExecContext(ctx, query, id)
 	return err
 }
 
-func (p *PostgresStore) ListUsers(ctx context.Context) ([]models.User, error) {
+func (u *UsersPostgresStore) ListUsers(ctx context.Context) ([]models.User, error) {
 	query := `SELECT id, first_name, last_name FROM users ORDER BY first_name`
-	rows, err := p.db.QueryContext(ctx, query)
+	rows, err := u.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
