@@ -1,11 +1,12 @@
 ## Social App (Go)
 
-A minimal social API built with Go, featuring a clean repository pattern, chi router, and pluggable data stores (in-memory and Postgres-ready).
+A minimal social API built with Go, featuring a clean repository pattern, chi router, and pluggable Postgres-backed stores.
 
 ### Tech Stack
 - Go `1.23`
 - Router: `github.com/go-chi/chi/v5`
 - UUIDs: `github.com/google/uuid`
+- Migrations: `golang-migrate`
 
 ### Project Structure
 ```
@@ -13,31 +14,42 @@ cmd/
   api/            # HTTP server (routes, handlers, middleware)
   internal/
     env/          # Simple env helpers
-    models/       # Shared domain models (User, Post, Session, DTOs)
+    models/       # Domain models + DTOs (User, Post, Session)
     store/        # Repository interfaces + implementations
       errors.go   # Common store errors
-      memory.go   # In-memory Store (default for local/dev)
-      users.go    # PostgresStore user methods
-      posts.go    # PostgresStore post methods (stubs)
-      auth.go     # PostgresStore session methods (stubs)
-      store.go    # Store composition + PostgresStore type
+      users.go    # UserPostgresStore (pointer-based)
+      posts.go    # PostPostgresStore (queries implemented)
+      auth.go     # AuthPostgresStore (stubs)
+      store.go    # Store interface + PostgresStore embedding sub-stores
+migrate/
+  migrations/     # SQL migrations (golang-migrate)
+docker-compose.yaml
+makefile          # migration helpers
 ```
 
 ### Quick Start
 1) Requirements: Go 1.23+
 
-2) Configure env (optional):
+2) Environment (example with direnv in `.envrc`):
 ```
-ADDR=:8080
+export ADDR=:8080
+export USE_DB=true
+export DB_ADDR=postgres://admin:adminpassword@localhost:5432/social?sslmode=disable
+export DB_MAX_OPEN_CONNS=30
+export DB_MAX_IDLE_CONNS=30
+export DB_MAX_IDLE_TIME_MIN=15
 ```
-You can set this via your shell or using `.envrc` if you use `direnv`.
 
-3) Run the server:
+3) Start Postgres (optional via Docker):
+```
+docker-compose up -d db
+```
+
+4) Run the server:
 ```
 go run ./cmd
 ```
-
-Server listens on `ADDR` (default `:8080`).
+Server listens on `ADDR`.
 
 ### API Endpoints (v1)
 - Health:
@@ -45,66 +57,100 @@ Server listens on `ADDR` (default `:8080`).
   - GET `/v1/healthcheck`
 
 - Users:
-  - GET  `/v1/users/`
-  - POST `/v1/users/`
-    - body: `{ "firstName": "John", "lastName": "Doe" }`
+  - GET  `/v1/users`
+  - POST `/v1/users`
+    - body: `{ "username": "alice", "email": "alice@example.com", "password": "secret" }`
   - GET    `/v1/users/{userID}`
-  - PUT    `/v1/users/{userID}`
+  - PUT    `/v1/users/{userID}` (update username/email)
   - DELETE `/v1/users/{userID}`
-
-Posts and Auth endpoints are scaffolded and can be extended.
 
 ### Example Requests
 Create a user:
 ```
-curl -X POST http://localhost:8080/v1/users/ \
+curl -X POST http://localhost:8080/v1/users \
   -H "Content-Type: application/json" \
-  -d '{"firstName":"Jane","lastName":"Doe"}'
+  -d '{"username":"alice","email":"alice@example.com","password":"secret"}'
 ```
 
 List users:
 ```
-curl http://localhost:8080/v1/users/
+curl http://localhost:8080/v1/users
 ```
 
 ### Repository Pattern
-The server depends on small, focused interfaces:
-- `UsersStore` and `PostsStore` (in `cmd/internal/store/users.go` and `posts.go`)
-- Combined as `Store` in `cmd/internal/store/store.go`
+- Interfaces: `UserStore`, `PostStore`, `AuthStore` (in `cmd/internal/store`)
+- Combined interface: `Store` (in `store.go`)
+- Implementation: `PostgresStore` embeds `*UserPostgresStore`, `*PostPostgresStore`, `*AuthPostgresStore` and satisfies `Store`.
+- Methods use pointer args where needed to support `RETURNING`.
 
-Implementations:
-- `MemoryStore` (thread-safe, great for dev/tests)
-- `PostgresStore` (methods for users implemented; posts/auth are stubs)
-
-Compile-time guarantees (optional pattern):
+Optional compile-time checks:
 ```
-var _ store.UsersStore = (*store.PostgresStore)(nil)
-var _ store.PostsStore = (*store.PostgresStore)(nil)
+var _ store.UserStore = (*store.PostgresStore)(nil)
+var _ store.PostStore = (*store.PostgresStore)(nil)
 ```
 
-### Switching Stores
-By default, `main.go` wires the in-memory store:
+### Migrations (golang-migrate)
+- Files in `cmd/migrate/migrations` with `NNNNNN_name.up.sql` / `.down.sql`
+- Makefile helpers:
 ```
-memoryStore := store.NewMemoryStore()
-app, _ := api.NewServer(cfg, memoryStore)
+make migrate-create <name>         # create new pair
+make migrate-up                    # apply up
+make migrate-down                  # rollback 1
+make migrate-down-all              # rollback all
+make migrate-version               # current version
+```
+Dirty DB fix (example):
+```
+migrate -path=cmd/migrate/migrations -database="$DB_ADDR" force <version>
 ```
 
-To use Postgres, create a DB, open a connection, and inject it:
+### Docker
+- Compose file starts Postgres 16 with:
+  - DB name: `social`, user: `admin`, password: `adminpassword`
+  - Port: `5432` on localhost
+  - Persistent volume: `db-data`
+
+Common commands:
 ```
-db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
-if err != nil { log.Fatal(err) }
+# start db
+docker-compose up -d db
 
-pg := store.NewPostgresStore(db)
-app, _ := api.NewServer(cfg, pg)
+# logs
+docker-compose logs -f db
+
+# stop/remove
+docker-compose down
+
+# remove container + volume (DANGEROUS)
+docker-compose down -v
 ```
-Note: Postgres methods for posts/auth are placeholders—add migrations and implement queries before enabling them.
 
-### Development
-- Lint/format with your editor’s Go tools.
-- Handlers log server-side errors for easier debugging.
+psql connection:
+```
+psql "postgres://admin:adminpassword@localhost:5432/social?sslmode=disable" -c "\dt"
+```
 
-### Notes
-- Models live in `cmd/internal/models` to avoid import cycles.
-- Handlers use `context.Context` throughout and return proper HTTP codes.
+Troubleshooting:
+- If migrations say "Dirty database version N": fix SQL, then `force <N-1>` and rerun `make migrate-up`.
+- Ensure `DB_ADDR` matches container settings and includes `:5432`.
+- If schema changed, re-run migrations or drop and recreate with `docker-compose down -v`.
+
+### TODO: Auth Implementation
+- Store layer
+  - Implement `AuthPostgresStore` methods: `CreateSession`, `GetSession`, `DeleteSession`
+  - Add migrations for `sessions` table (token, user_id FK, expires_at, created_at)
+- API layer
+  - Routes: `/v1/auth/login`, `/v1/auth/register`, `/v1/auth/logout`
+  - Handlers: issue/revoke sessions; return tokens (e.g., HTTP-only cookie or bearer token)
+- Security
+  - Hash passwords with `bcrypt` on registration; compare on login
+  - Use secure, random session tokens (e.g., 32+ bytes base64)
+  - Set cookie flags: HttpOnly, Secure (in prod), SameSite
+- Middleware
+  - `authMiddleware` to extract/validate session and set user context
+  - Optional role/permission checks
+- Testing
+  - Unit tests for auth store + handlers
+  - Integration tests: login -> access protected route -> logout
 
 

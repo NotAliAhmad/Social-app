@@ -19,6 +19,7 @@ type User = models.User
 func (server *Server) listUsersHandler(w http.ResponseWriter, r *http.Request) {
 	users, err := server.Store.ListUsers(r.Context())
 	if err != nil {
+		log.Printf("listUsersHandler error: %v", err)
 		http.Error(w, "Failed to list users", http.StatusInternalServerError)
 		return
 	}
@@ -37,19 +38,14 @@ func (server *Server) createUserHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Validate required fields
-	if req.FirstName == "" || req.LastName == "" {
-		http.Error(w, "First name and last name are required", http.StatusBadRequest)
-		return
-	}
-
 	user := User{
-		ID:        uuid.New().String(),
-		FirstName: req.FirstName,
-		LastName:  req.LastName,
+		ID:       uuid.New().String(),
+		Username: req.Username,
+		Email:    req.Email,
+		Password: req.Password,
 	}
 
-	err = server.Store.CreateUser(r.Context(), user)
+	err = server.Store.CreateUser(r.Context(), &user)
 	if err != nil {
 		log.Printf("Failed to create user: %v", err)
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
@@ -94,14 +90,8 @@ func (server *Server) updateUserHandler(w http.ResponseWriter, r *http.Request) 
 
 	// Update the user with new values
 	updatedUser := *existingUser
-	if req.FirstName != "" {
-		updatedUser.FirstName = req.FirstName
-	}
-	if req.LastName != "" {
-		updatedUser.LastName = req.LastName
-	}
 
-	err = server.Store.UpdateUser(r.Context(), ID, updatedUser)
+	err = server.Store.UpdateUser(r.Context(), ID, &updatedUser)
 	if err != nil {
 		http.Error(w, "Failed to update user", http.StatusInternalServerError)
 		return

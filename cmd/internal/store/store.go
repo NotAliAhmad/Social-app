@@ -6,17 +6,21 @@ import (
 
 // Store defines the interface for data persistence operations
 type Store interface {
-	UsersStore
-	PostsStore
+	UserStore
+	PostStore
 	AuthStore
 }
 
 type PostgresStore struct {
-	db *sql.DB
+	*UserPostgresStore
+	*PostPostgresStore
+	*AuthPostgresStore
 }
 
 func NewPostgresStore(db *sql.DB) *PostgresStore {
 	return &PostgresStore{
-		db: db,
+		UserPostgresStore: NewUsersPostgresStore(db),
+		PostPostgresStore: NewPostPostgresStore(db),
+		AuthPostgresStore: NewAuthPostgresStore(db),
 	}
 }

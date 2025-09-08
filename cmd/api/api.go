@@ -15,7 +15,15 @@ type Server struct {
 }
 
 type Config struct {
-	Addr string
+	Addr     string
+	DBconfig DBConfig
+}
+
+type DBConfig struct {
+	Addr         string
+	MaxOpenConns int
+	MaxIdleConns int
+	MaxIdleTime  string
 }
 
 // NewApplication creates a new Application instance with the provided config and store
